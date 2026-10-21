@@ -582,9 +582,68 @@ export default function PulseAnalyticsPro() {
         : 'Connection unavailable'
 
   return (
-    <div className="min-h-screen bg-[#090b10] text-slate-100 selection:bg-violet-500/30">
+    <div className="page-entry-shell min-h-screen bg-[#090b10] text-slate-100 selection:bg-violet-500/30">
+      <style>{`
+        @keyframes pulse-page-rise {
+          from { opacity: 0; transform: translate3d(0, 18px, 0); }
+          to { opacity: 1; transform: translate3d(0, 0, 0); }
+        }
+        @keyframes pulse-sidebar-reveal {
+          from { opacity: 0; transform: translate3d(-16px, 0, 0); }
+          to { opacity: 1; transform: translate3d(0, 0, 0); }
+        }
+        @keyframes pulse-light-drift {
+          0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: .58; }
+          50% { transform: translate3d(22px, 12px, 0) scale(1.08); opacity: .82; }
+        }
+        .page-entry-shell::before {
+          position: fixed;
+          top: -260px;
+          right: -180px;
+          z-index: 0;
+          width: min(720px, 95vw);
+          height: min(620px, 80vh);
+          border-radius: 50%;
+          background: radial-gradient(ellipse, rgba(112, 74, 255, .13) 0%, rgba(76, 59, 190, .055) 36%, transparent 72%);
+          content: "";
+          pointer-events: none;
+          animation: pulse-light-drift 12s ease-in-out infinite;
+        }
+        .page-entry-shell > div {
+          position: relative;
+          z-index: 1;
+        }
+        .sidebar-entry {
+          animation: pulse-sidebar-reveal .72s cubic-bezier(.2, .7, .25, 1) both;
+        }
+        .topbar-entry {
+          animation: pulse-page-rise .68s cubic-bezier(.2, .7, .25, 1) .08s both;
+        }
+        .content-entry {
+          animation: pulse-page-rise .72s cubic-bezier(.2, .7, .25, 1) .16s both;
+        }
+        .stagger-entry > * {
+          animation: pulse-page-rise .62s cubic-bezier(.2, .7, .25, 1) both;
+        }
+        .stagger-entry > *:nth-child(2) { animation-delay: .09s; }
+        .stagger-entry > *:nth-child(3) { animation-delay: .18s; }
+        .stagger-entry > *:nth-child(4) { animation-delay: .27s; }
+        .modal-entry {
+          animation: pulse-page-rise .3s cubic-bezier(.2, .7, .25, 1) both;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .page-entry-shell::before,
+          .sidebar-entry,
+          .topbar-entry,
+          .content-entry,
+          .stagger-entry > *,
+          .modal-entry {
+            animation: none !important;
+          }
+        }
+      `}</style>
       <div className="mx-auto flex min-h-screen max-w-[1680px]">
-        <aside className="hidden w-[252px] shrink-0 flex-col border-r border-white/[0.07] bg-[#0c0e14] px-5 py-6 lg:flex">
+        <aside className="sidebar-entry hidden w-[252px] shrink-0 flex-col border-r border-white/[0.07] bg-[#0c0e14] px-5 py-6 lg:flex">
           <button
             onClick={() => setActivePage('overview')}
             className="mb-10 flex items-center gap-3 px-2 text-left"
@@ -693,7 +752,7 @@ export default function PulseAnalyticsPro() {
         </aside>
 
         <main className="min-w-0 flex-1">
-          <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#090b10]/90 backdrop-blur-xl">
+          <header className="topbar-entry sticky top-0 z-20 border-b border-white/[0.07] bg-[#090b10]/90 backdrop-blur-xl">
             <div className="flex min-h-[70px] items-center justify-between gap-4 px-5 sm:px-8 xl:px-10">
               <div className="flex min-w-0 items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white lg:hidden">
@@ -817,7 +876,7 @@ export default function PulseAnalyticsPro() {
             </div>
           </header>
 
-          <div className="mx-auto max-w-[1380px] px-5 py-8 sm:px-8 sm:py-10 xl:px-10">
+          <div className="content-entry mx-auto max-w-[1380px] px-5 py-8 sm:px-8 sm:py-10 xl:px-10">
             <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
               <div>
                 <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">
@@ -862,7 +921,7 @@ export default function PulseAnalyticsPro() {
 
             {activePage === 'overview' && (
               <div className="space-y-5">
-                <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <section className="stagger-entry grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   {[
                     {
                       label: 'Tracked metrics',
@@ -927,7 +986,7 @@ export default function PulseAnalyticsPro() {
                   ))}
                 </section>
 
-                <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(290px,0.85fr)]">
+                <section className="stagger-entry grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(290px,0.85fr)]">
                   <div className="rounded-2xl border border-white/[0.07] bg-[#101219] p-5 sm:p-6">
                     <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -1490,7 +1549,7 @@ export default function PulseAnalyticsPro() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="metric-modal-title"
-            className="w-full max-w-md rounded-2xl border border-white/[0.1] bg-[#11131b] p-6 shadow-2xl shadow-black/50"
+            className="modal-entry w-full max-w-md rounded-2xl border border-white/[0.1] bg-[#11131b] p-6 shadow-2xl shadow-black/50"
           >
             <div className="mb-6 flex items-start justify-between">
               <div>
