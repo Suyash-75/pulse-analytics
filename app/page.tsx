@@ -4,11 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  'https://dqoplrolsocpengnxocp.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '******'
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? ''
+const supabaseAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? ''
+const hasSupabaseConfig = Boolean(
+  /^https?:\/\//i.test(supabaseUrl) &&
+    supabaseAnonKey &&
+    !/^(?:\*+|your[_ -].*|replace.*|placeholder.*|<.*>)$/i.test(
+      supabaseAnonKey,
+    ),
+)
+const supabaseConfigMessage =
+  'Supabase is not configured. Set a valid NEXT_PUBLIC_SUPABASE_URL and the matching NEXT_PUBLIC_SUPABASE_ANON_KEY in your deployment environment, then redeploy.'
+const supabase = hasSupabaseConfig
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null
 
 interface Metric {
   id: string
@@ -177,11 +187,21 @@ export default function PulseAnalyticsPro() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<
     'connecting' | 'connected' | 'disconnected'
-  >('connecting')
+  >(hasSupabaseConfig ? 'connecting' : 'disconnected')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
+  useEffect(() => {
+    document.title = 'Pulse Analytics | Analytics Studio'
+  }, [])
+
   const fetchMetrics = useCallback(async () => {
+    if (!supabase) {
+      setErrorMessage(supabaseConfigMessage)
+      setLoading(false)
+      return
+    }
+
     try {
       const { data, error } = await supabase
         .from('pulse_metrics')
@@ -189,7 +209,13 @@ export default function PulseAnalyticsPro() {
         .order('created_at', { ascending: false })
 
       if (error) {
-        setErrorMessage(`Couldn't load metrics: ${error.message}`)
+        const invalidApiKey = /invalid api key|unauthorized/i.test(error.message)
+        if (invalidApiKey) setConnectionStatus('disconnected')
+        setErrorMessage(
+          invalidApiKey
+            ? 'Supabase rejected the API key. Check that NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY belong to the same project, then redeploy.'
+            : `Couldn't load metrics: ${error.message}`,
+        )
         return
       }
 
@@ -211,6 +237,10 @@ export default function PulseAnalyticsPro() {
       void fetchMetrics()
     }, 0)
 
+    if (!supabase) {
+      return () => window.clearTimeout(initialLoad)
+    }
+
     const channel = supabase
       .channel('realtime_pulse_metrics')
       .on(
@@ -221,12 +251,16 @@ export default function PulseAnalyticsPro() {
         },
       )
       .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setConnectionStatus('disconnected')
+          void supabase.removeChannel(channel)
+          return
+        }
+
         setConnectionStatus(
           status === 'SUBSCRIBED'
             ? 'connected'
-            : status === 'CHANNEL_ERROR' ||
-                status === 'TIMED_OUT' ||
-                status === 'CLOSED'
+            : status === 'CLOSED'
               ? 'disconnected'
               : 'connecting',
         )
@@ -310,6 +344,11 @@ export default function PulseAnalyticsPro() {
 
   async function handleAddMetric(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!supabase) {
+      setErrorMessage(supabaseConfigMessage)
+      return
+    }
+
     setSubmitting(true)
     setErrorMessage(null)
 
@@ -319,7 +358,13 @@ export default function PulseAnalyticsPro() {
         .insert([{ title: title.trim(), value: value.trim(), change: change.trim() }])
 
       if (error) {
-        setErrorMessage(`Couldn't save your metric: ${error.message}`)
+        const invalidApiKey = /invalid api key|unauthorized/i.test(error.message)
+        if (invalidApiKey) setConnectionStatus('disconnected')
+        setErrorMessage(
+          invalidApiKey
+            ? 'Supabase rejected the API key. Check that NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY belong to the same project, then redeploy.'
+            : `Couldn't save your metric: ${error.message}`,
+        )
         return
       }
 
@@ -341,6 +386,11 @@ export default function PulseAnalyticsPro() {
   }
 
   async function handleDelete(metric: Metric) {
+    if (!supabase) {
+      setErrorMessage(supabaseConfigMessage)
+      return
+    }
+
     setDeletingId(metric.id)
     setErrorMessage(null)
 
@@ -351,7 +401,13 @@ export default function PulseAnalyticsPro() {
         .eq('id', metric.id)
 
       if (error) {
-        setErrorMessage(`Couldn't delete this metric: ${error.message}`)
+        const invalidApiKey = /invalid api key|unauthorized/i.test(error.message)
+        if (invalidApiKey) setConnectionStatus('disconnected')
+        setErrorMessage(
+          invalidApiKey
+            ? 'Supabase rejected the API key. Check that NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY belong to the same project, then redeploy.'
+            : `Couldn't delete this metric: ${error.message}`,
+        )
         return
       }
 
@@ -398,7 +454,7 @@ export default function PulseAnalyticsPro() {
       ? 'Live connection'
       : connectionStatus === 'connecting'
         ? 'Connecting'
-        : 'Reconnecting'
+        : 'Connection unavailable'
 
   return (
     <div className="min-h-screen bg-[#090b10] text-slate-100 selection:bg-violet-500/30">
@@ -1116,7 +1172,7 @@ export default function PulseAnalyticsPro() {
                       <div className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-[#0b0d12] px-3.5 py-3">
                         <Icon name="database" size={15} className="shrink-0 text-violet-400" />
                         <span className="min-w-0 break-all font-mono text-[11px] text-slate-400">
-                          {supabaseUrl}
+                          {supabaseUrl || 'Not configured'}
                         </span>
                       </div>
                     </div>
