@@ -14,9 +14,9 @@ const supabasePublishableKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
   'sb_publishable_hM6bsuQL3cr588yjkQV2mg_8HWENeFa'
 const supabaseKey =
-  process.env.NEXT_PUBLIC_SUPABASE_KEY_TYPE?.trim() === 'publishable'
-    ? supabasePublishableKey
-    : supabaseAnonKey
+  /^(?:eyJ|sb_publishable_)/.test(supabaseAnonKey)
+    ? supabaseAnonKey
+    : supabasePublishableKey
 const hasSupabaseConfig = Boolean(
   /^https?:\/\//i.test(supabaseUrl) &&
     /^(?:eyJ|sb_publishable_)/.test(supabaseKey) &&
@@ -25,7 +25,7 @@ const hasSupabaseConfig = Boolean(
     ),
 )
 const supabaseConfigMessage =
-  'Supabase is not configured. Set a valid NEXT_PUBLIC_SUPABASE_URL and the matching NEXT_PUBLIC_SUPABASE_ANON_KEY in your deployment environment, then redeploy.'
+  'Supabase is not configured. Add the project URL and matching anon or publishable key to your deployment environment, then redeploy.'
 const supabase = hasSupabaseConfig
   ? createClient(supabaseUrl, supabaseKey)
   : null
@@ -1210,7 +1210,7 @@ export default function PulseAnalyticsPro() {
                   </div>
                 </div>
                 <div className="rounded-2xl border border-amber-400/[0.12] bg-amber-400/[0.035] p-4 text-[11px] leading-5 text-slate-500">
-                  Database credentials are read from the public <span className="font-mono text-amber-200/80">NEXT_PUBLIC_SUPABASE_URL</span> and <span className="font-mono text-amber-200/80">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> environment variables. Keep privileged service keys on the server and never expose them in client code.
+                  Database credentials can be supplied using <span className="font-mono text-amber-200/80">NEXT_PUBLIC_SUPABASE_URL</span> and either the <span className="font-mono text-amber-200/80">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> or <span className="font-mono text-amber-200/80">NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</span>. Keep privileged service keys on the server and never expose them in client code.
                 </div>
               </section>
             )}
