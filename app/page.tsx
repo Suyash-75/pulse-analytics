@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import type { User } from '@supabase/supabase-js'
 
 const supabaseUrl = 'https://dqoplrolsocpengnxocp.supabase.co'
 const supabaseAnonKey =
@@ -30,6 +31,7 @@ interface Metric {
   value: string
   change: string
   created_at: string
+  user_id?: string | null
 }
 
 type PageId =
@@ -194,9 +196,28 @@ export default function PulseAnalyticsPro() {
   >(hasSupabaseConfig ? 'connecting' : 'disconnected')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [authUser, setAuthUser] = useState<User | null>(null)
+  const [authLoading, setAuthLoading] = useState(hasSupabaseConfig)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+  const [authMode, setAuthMode] = useState<'sign_in' | 'sign_up'>('sign_in')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authSubmitting, setAuthSubmitting] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
     document.title = 'Pulse Analytics | Analytics Studio'
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) return
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ?? null)
+      setAuthLoading(false)
+    })
+
+    return () => data.subscription.unsubscribe()
   }, [])
 
   const fetchMetrics = useCallback(async () => {
@@ -346,10 +367,96 @@ export default function PulseAnalyticsPro() {
   const chartArea = `${chartPoints} 590,142 8,142`
   const page = pageDetails[activePage]
 
+  function requestAddMetric() {
+    if (!authUser) {
+      setAuthMode('sign_in')
+      setAuthError(null)
+      setIsAuthModalOpen(true)
+      return
+    }
+
+    setIsModalOpen(true)
+  }
+
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supabase) {
+      setAuthError(supabaseConfigMessage)
+      return
+    }
+
+    setAuthSubmitting(true)
+    setAuthError(null)
+
+    try {
+      const result =
+        authMode === 'sign_in'
+          ? await supabase.auth.signInWithPassword({
+              email: authEmail.trim(),
+              password: authPassword,
+            })
+          : await supabase.auth.signUp({
+              email: authEmail.trim(),
+              password: authPassword,
+            })
+
+      if (result.error) {
+        setAuthError(result.error.message)
+        return
+      }
+
+      if (authMode === 'sign_up' && !result.data.session) {
+        setIsAuthModalOpen(false)
+        setAuthPassword('')
+        setToastMessage('Account created. Check your email to confirm your address, then sign in.')
+        return
+      }
+
+      setAuthUser(result.data.user)
+      setIsAuthModalOpen(false)
+      setAuthPassword('')
+      setToastMessage(authMode === 'sign_in' ? 'You are signed in.' : 'Your account is ready.')
+    } catch (error) {
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : 'An unexpected error stopped authentication.',
+      )
+    } finally {
+      setAuthSubmitting(false)
+    }
+  }
+
+  async function handleSignOut() {
+    if (!supabase) return
+
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        setErrorMessage(`Couldn't sign out: ${error.message}`)
+        return
+      }
+
+      setAuthUser(null)
+      setToastMessage('You have signed out.')
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? `Couldn't sign out: ${error.message}`
+          : 'An unexpected error stopped you from signing out.',
+      )
+    }
+  }
+
   async function handleAddMetric(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!supabase) {
       setErrorMessage(supabaseConfigMessage)
+      return
+    }
+    if (!authUser) {
+      setIsModalOpen(false)
+      requestAddMetric()
       return
     }
 
@@ -359,7 +466,14 @@ export default function PulseAnalyticsPro() {
     try {
       const { error } = await supabase
         .from('pulse_metrics')
-        .insert([{ title: title.trim(), value: value.trim(), change: change.trim() }])
+        .insert([
+          {
+            title: title.trim(),
+            value: value.trim(),
+            change: change.trim(),
+            user_id: authUser.id,
+          },
+        ])
 
       if (error) {
         const invalidApiKey = /invalid api key|unauthorized/i.test(error.message)
@@ -392,6 +506,13 @@ export default function PulseAnalyticsPro() {
   async function handleDelete(metric: Metric) {
     if (!supabase) {
       setErrorMessage(supabaseConfigMessage)
+      return
+    }
+    if (!authUser || metric.user_id !== authUser.id) {
+      setSelectedMetric(null)
+      setAuthMode('sign_in')
+      setAuthError(null)
+      setIsAuthModalOpen(true)
       return
     }
 
@@ -636,12 +757,34 @@ export default function PulseAnalyticsPro() {
                   <Icon name="refresh" size={16} className={loading ? 'animate-spin' : ''} />
                 </button>
                 <button
-                  onClick={() => setIsModalOpen(true)}
+                  onClick={() => {
+                    if (authUser) {
+                      void handleSignOut()
+                    } else {
+                      setAuthMode('sign_in')
+                      setAuthError(null)
+                      setIsAuthModalOpen(true)
+                    }
+                  }}
+                  disabled={authLoading}
+                  className="h-9 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 text-xs font-medium text-slate-300 transition hover:border-white/[0.14] hover:text-white disabled:opacity-50"
+                >
+                  {authLoading
+                    ? 'Checking...'
+                    : authUser
+                      ? 'Sign out'
+                      : 'Sign in'}
+                </button>
+                <button
+                  onClick={requestAddMetric}
+                  disabled={authLoading}
                   className="flex h-9 items-center gap-2 rounded-xl bg-violet-500 px-3.5 text-xs font-semibold text-white shadow-lg shadow-violet-950/30 transition hover:bg-violet-400 sm:px-4"
                 >
                   <Icon name="plus" size={16} />
-                  <span className="hidden sm:inline">New metric</span>
-                  <span className="sm:hidden">Add</span>
+                  <span className="hidden sm:inline">
+                    {authUser ? 'New metric' : 'Sign in to add'}
+                  </span>
+                  <span className="sm:hidden">{authUser ? 'Add' : 'Sign in'}</span>
                 </button>
               </div>
             </div>
@@ -912,11 +1055,15 @@ export default function PulseAnalyticsPro() {
                           </button>
                         ))}
                       </div>
+                    ) : authUser ? (
+                      <p className="flex flex-1 items-center justify-center rounded-xl border border-white/[0.06] px-3 text-center text-[11px] text-slate-500">
+                        Only the account that created this metric can delete it.
+                      </p>
                     ) : (
                       <EmptyState
                         title="Nothing to show yet"
                         description="Add a metric and your latest records will show up here."
-                        action={() => setIsModalOpen(true)}
+                        action={requestAddMetric}
                         actionLabel="Add a metric"
                       />
                     )}
@@ -942,7 +1089,7 @@ export default function PulseAnalyticsPro() {
                     metrics={filteredMetrics.slice(0, 6)}
                     loading={loading}
                     onSelect={setSelectedMetric}
-                    onAdd={() => setIsModalOpen(true)}
+                    onAdd={requestAddMetric}
                   />
                 </section>
               </div>
@@ -1019,7 +1166,7 @@ export default function PulseAnalyticsPro() {
                   <EmptyState
                     title="Your library is ready for its first metric"
                     description="Create a metric to start building a live, searchable library of your database signals."
-                    action={() => setIsModalOpen(true)}
+                    action={requestAddMetric}
                     actionLabel="Create your first metric"
                   />
                 )}
@@ -1057,7 +1204,7 @@ export default function PulseAnalyticsPro() {
                   metrics={filteredMetrics}
                   loading={loading}
                   onSelect={setSelectedMetric}
-                  onAdd={() => setIsModalOpen(true)}
+                  onAdd={requestAddMetric}
                 />
               </section>
             )}
@@ -1103,7 +1250,7 @@ export default function PulseAnalyticsPro() {
                     metrics={filteredMetrics.slice(0, 5)}
                     loading={loading}
                     onSelect={setSelectedMetric}
-                    onAdd={() => setIsModalOpen(true)}
+                    onAdd={requestAddMetric}
                   />
                 </div>
               </section>
@@ -1204,7 +1351,7 @@ export default function PulseAnalyticsPro() {
                   </div>
                 </div>
                 <div className="rounded-2xl border border-amber-400/[0.12] bg-amber-400/[0.035] p-4 text-[11px] leading-5 text-slate-500">
-                  Database credentials can be supplied using <span className="font-mono text-amber-200/80">NEXT_PUBLIC_SUPABASE_URL</span> and either the <span className="font-mono text-amber-200/80">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> or <span className="font-mono text-amber-200/80">NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</span>. Keep privileged service keys on the server and never expose them in client code.
+                  Metrics are publicly readable. Sign in to create metrics; only the account that created a metric can delete it. Row-level security enforces these rules in PostgreSQL. Never expose a Supabase service-role key in client code.
                 </div>
               </section>
             )}
@@ -1219,6 +1366,118 @@ export default function PulseAnalyticsPro() {
           </footer>
         </main>
       </div>
+
+      {isAuthModalOpen && (
+        <div
+          className="fixed inset-0 z-[55] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !authSubmitting) {
+              setIsAuthModalOpen(false)
+              setAuthError(null)
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auth-modal-title"
+            className="w-full max-w-md rounded-2xl border border-white/[0.1] bg-[#11131b] p-6 shadow-2xl shadow-black/50"
+          >
+            <div className="mb-6 flex items-start justify-between">
+              <div>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300">
+                  Secure workspace
+                </div>
+                <h2 id="auth-modal-title" className="text-lg font-semibold text-white">
+                  {authMode === 'sign_in' ? 'Welcome back' : 'Create your account'}
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  {authMode === 'sign_in'
+                    ? 'Sign in to create and manage your metrics.'
+                    : 'Create an account to save your own metrics.'}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAuthModalOpen(false)
+                  setAuthError(null)
+                }}
+                disabled={authSubmitting}
+                aria-label="Close sign in dialog"
+                className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/[0.06] hover:text-white disabled:opacity-40"
+              >
+                <Icon name="close" size={17} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              <label className="block">
+                <span className="text-[11px] font-medium text-slate-400">Email address</span>
+                <input
+                  autoFocus
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={authEmail}
+                  onChange={(event) => setAuthEmail(event.target.value)}
+                  maxLength={254}
+                  required
+                  className="mt-1.5 h-11 w-full rounded-xl border border-white/[0.08] bg-[#0b0d12] px-3.5 text-sm text-white outline-none transition placeholder:text-slate-700 focus:border-violet-400/50"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-medium text-slate-400">Password</span>
+                <input
+                  type="password"
+                  autoComplete={authMode === 'sign_in' ? 'current-password' : 'new-password'}
+                  placeholder="At least 8 characters"
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                  minLength={authMode === 'sign_up' ? 8 : undefined}
+                  maxLength={128}
+                  required
+                  className="mt-1.5 h-11 w-full rounded-xl border border-white/[0.08] bg-[#0b0d12] px-3.5 text-sm text-white outline-none transition placeholder:text-slate-700 focus:border-violet-400/50"
+                />
+              </label>
+
+              {authError && (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-rose-400/15 bg-rose-400/[0.06] px-3 py-2 text-xs text-rose-200"
+                >
+                  {authError}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={authSubmitting || !authEmail.trim() || !authPassword}
+                className="flex h-11 w-full items-center justify-center rounded-xl bg-violet-500 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {authSubmitting
+                  ? 'Please wait...'
+                  : authMode === 'sign_in'
+                    ? 'Sign in'
+                    : 'Create account'}
+              </button>
+            </form>
+
+            <p className="mt-5 text-center text-xs text-slate-500">
+              {authMode === 'sign_in' ? 'New to Pulse?' : 'Already have an account?'}{' '}
+              <button
+                onClick={() => {
+                  setAuthMode(authMode === 'sign_in' ? 'sign_up' : 'sign_in')
+                  setAuthError(null)
+                }}
+                disabled={authSubmitting}
+                className="font-medium text-violet-300 hover:text-violet-200 disabled:opacity-50"
+              >
+                {authMode === 'sign_in' ? 'Create an account' : 'Sign in'}
+              </button>
+            </p>
+          </div>
+        </div>
+      )}
 
       {isModalOpen && (
         <div
@@ -1371,6 +1630,7 @@ export default function PulseAnalyticsPro() {
               </div>
             </div>
             <div className="mt-5 flex gap-3">
+            {authUser?.id === selectedMetric.user_id ? (
               <button
                 onClick={() => void handleDelete(selectedMetric)}
                 disabled={deletingId === selectedMetric.id}
@@ -1379,7 +1639,20 @@ export default function PulseAnalyticsPro() {
                 <Icon name="trash" size={15} />
                 {deletingId === selectedMetric.id ? 'Deleting...' : 'Delete metric'}
               </button>
+            ) : (
               <button
+                onClick={() => {
+                  setSelectedMetric(null)
+                  setAuthMode('sign_in')
+                  setAuthError(null)
+                  setIsAuthModalOpen(true)
+                }}
+                className="h-10 flex-1 rounded-xl border border-violet-400/15 bg-violet-400/[0.06] text-xs font-medium text-violet-300 transition hover:bg-violet-400/[0.12]"
+              >
+                Sign in to manage metrics
+              </button>
+            )}
+            <button
                 onClick={() => setSelectedMetric(null)}
                 disabled={Boolean(deletingId)}
                 className="h-10 flex-1 rounded-xl border border-white/[0.08] text-xs font-medium text-slate-300 transition hover:bg-white/[0.04] disabled:opacity-50"
