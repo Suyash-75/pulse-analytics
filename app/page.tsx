@@ -4,19 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ||
-  'https://dqoplrolsocpengnxocp.supabase.co'
+const supabaseUrl = 'https://dqoplrolsocpengnxocp.supabase.co'
 const supabaseAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxb3Bscm9sc29jcGVuZ254b2NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1OTIxMDAsImV4cCI6MjEwODE2ODEwMH0.QMfvTDuX-6GIjC9f-tBfLsWoWCa8Xh55Zxv4sWfpCDE'
 const supabasePublishableKey =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
   'sb_publishable_hM6bsuQL3cr588yjkQV2mg_8HWENeFa'
-const supabaseKey =
-  /^(?:eyJ|sb_publishable_)/.test(supabaseAnonKey)
-    ? supabaseAnonKey
-    : supabasePublishableKey
+const supabaseKey = supabasePublishableKey || supabaseAnonKey
 const hasSupabaseConfig = Boolean(
   /^https?:\/\//i.test(supabaseUrl) &&
     /^(?:eyJ|sb_publishable_)/.test(supabaseKey) &&
