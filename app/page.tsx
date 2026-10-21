@@ -179,6 +179,9 @@ function escapeCsv(value: string) {
 }
 
 export default function PulseAnalyticsPro() {
+  const [introPhase, setIntroPhase] = useState<
+    'intro' | 'exit' | 'dashboard'
+  >('intro')
   const [metrics, setMetrics] = useState<Metric[]>([])
   const [loading, setLoading] = useState(true)
   const [activePage, setActivePage] = useState<PageId>('overview')
@@ -208,6 +211,23 @@ export default function PulseAnalyticsPro() {
   useEffect(() => {
     document.title = 'Pulse Analytics | Analytics Studio'
   }, [])
+
+  useEffect(() => {
+    if (introPhase !== 'intro') return
+
+    const introTimer = window.setTimeout(() => setIntroPhase('exit'), 3100)
+    return () => window.clearTimeout(introTimer)
+  }, [introPhase])
+
+  useEffect(() => {
+    if (introPhase !== 'exit') return
+
+    const dashboardTimer = window.setTimeout(
+      () => setIntroPhase('dashboard'),
+      850,
+    )
+    return () => window.clearTimeout(dashboardTimer)
+  }, [introPhase])
 
   useEffect(() => {
     if (!supabase) return
@@ -584,6 +604,147 @@ export default function PulseAnalyticsPro() {
   return (
     <div className="page-entry-shell min-h-screen bg-[#090b10] text-slate-100 selection:bg-violet-500/30">
       <style>{`
+        @keyframes pulse-intro-arrive {
+          0% { opacity: 0; transform: translate3d(0, 32px, 0) scale(.97); filter: blur(8px); }
+          70% { opacity: 1; filter: blur(0); }
+          100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
+        }
+        @keyframes pulse-intro-exit {
+          to { opacity: 0; transform: translate3d(0, -36px, 0) scale(1.025); filter: blur(8px); }
+        }
+        @keyframes pulse-dashboard-slide {
+          from { opacity: 0; transform: translate3d(0, 48px, 0) scale(.985); filter: blur(6px); }
+          to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
+        }
+        @keyframes pulse-intro-glow {
+          0%, 100% { transform: scale(.9); opacity: .55; }
+          50% { transform: scale(1.1); opacity: .85; }
+        }
+        @keyframes pulse-intro-progress {
+          from { transform: scaleX(0); }
+          to { transform: scaleX(1); }
+        }
+        .intro-screen {
+          position: fixed;
+          inset: 0;
+          z-index: 100;
+          display: grid;
+          place-items: center;
+          overflow: hidden;
+          background: #080910;
+        }
+        .intro-screen::before,
+        .intro-screen::after {
+          position: absolute;
+          width: min(72vw, 680px);
+          aspect-ratio: 1;
+          border: 1px solid rgba(167, 139, 250, .10);
+          border-radius: 50%;
+          content: "";
+          pointer-events: none;
+          animation: pulse-intro-glow 6s ease-in-out infinite;
+        }
+        .intro-screen::after {
+          width: min(55vw, 500px);
+          border-color: rgba(129, 140, 248, .12);
+          animation-delay: -.9s;
+        }
+        .intro-copy {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          width: 100%;
+          flex-direction: column;
+          align-items: center;
+          padding: 2rem;
+          text-align: center;
+          animation: pulse-intro-arrive 1.2s cubic-bezier(.18, .72, .24, 1) both;
+        }
+        .intro-exit .intro-copy {
+          animation: pulse-intro-exit .8s cubic-bezier(.65, 0, .84, .25) both;
+        }
+        .intro-mark {
+          display: grid;
+          width: 58px;
+          height: 58px;
+          place-items: center;
+          border: 1px solid rgba(196, 181, 253, .26);
+          border-radius: 19px;
+          background: linear-gradient(145deg, rgba(139, 92, 246, .26), rgba(79, 70, 229, .10));
+          color: #ddd6fe;
+          box-shadow: 0 0 60px rgba(124, 58, 237, .27), inset 0 1px rgba(255,255,255,.12);
+        }
+        .intro-wordmark {
+          margin-top: 30px;
+          padding-left: .2em;
+          font-size: clamp(4.5rem, 15vw, 10.5rem);
+          font-weight: 650;
+          line-height: .9;
+          letter-spacing: .2em;
+          background: linear-gradient(180deg, #fff 8%, #ddd6fe 56%, #8b86ad 100%);
+          background-clip: text;
+          color: transparent;
+          -webkit-background-clip: text;
+        }
+        .intro-rule {
+          width: min(260px, 58vw);
+          height: 1px;
+          margin-top: 28px;
+          background: linear-gradient(90deg, transparent, rgba(196,181,253,.8), transparent);
+          box-shadow: 0 0 18px rgba(167,139,250,.48);
+        }
+        .intro-byline {
+          margin-top: 20px;
+          color: #aaa6bd;
+          font-size: clamp(.72rem, 2vw, .88rem);
+          font-weight: 500;
+          letter-spacing: .28em;
+          text-transform: uppercase;
+        }
+        .intro-caption {
+          margin-top: 10px;
+          color: #605c71;
+          font-size: 10px;
+          letter-spacing: .3em;
+          text-transform: uppercase;
+        }
+        .intro-progress {
+          position: absolute;
+          right: 0;
+          bottom: 0;
+          left: 0;
+          height: 2px;
+          transform: scaleX(0);
+          transform-origin: left;
+          background: linear-gradient(90deg, #7c3aed, #c4b5fd, #818cf8);
+          box-shadow: 0 0 16px rgba(167,139,250,.55);
+          animation: pulse-intro-progress 3.95s linear both;
+        }
+        .intro-skip {
+          position: absolute;
+          right: max(24px, env(safe-area-inset-right));
+          bottom: max(24px, env(safe-area-inset-bottom));
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          border: 1px solid rgba(255,255,255,.1);
+          border-radius: 999px;
+          padding: 10px 15px;
+          color: #a9a6b6;
+          font-size: 10px;
+          letter-spacing: .16em;
+          text-transform: uppercase;
+          transition: color .2s ease, border-color .2s ease, background .2s ease;
+        }
+        .intro-skip:hover {
+          border-color: rgba(196,181,253,.38);
+          background: rgba(167,139,250,.08);
+          color: #fff;
+        }
+        .dashboard-waiting { visibility: hidden; }
+        .dashboard-slide-in {
+          animation: pulse-dashboard-slide .95s cubic-bezier(.18, .72, .24, 1) both;
+        }
         @keyframes pulse-page-rise {
           from { opacity: 0; transform: translate3d(0, 18px, 0); }
           to { opacity: 1; transform: translate3d(0, 0, 0); }
@@ -632,6 +793,12 @@ export default function PulseAnalyticsPro() {
           animation: pulse-page-rise .3s cubic-bezier(.2, .7, .25, 1) both;
         }
         @media (prefers-reduced-motion: reduce) {
+          .intro-screen::before,
+          .intro-screen::after,
+          .intro-copy,
+          .intro-exit .intro-copy,
+          .intro-progress,
+          .dashboard-slide-in,
           .page-entry-shell::before,
           .sidebar-entry,
           .topbar-entry,
@@ -642,7 +809,39 @@ export default function PulseAnalyticsPro() {
           }
         }
       `}</style>
-      <div className="mx-auto flex min-h-screen max-w-[1680px]">
+      {introPhase !== 'dashboard' && (
+        <section
+          className={`intro-screen${introPhase === 'exit' ? ' intro-exit' : ''}`}
+          aria-label="Pulse Analytics introduction"
+          aria-live="polite"
+        >
+          <div className="intro-copy">
+            <div className="intro-mark">
+              <Icon name="activity" size={27} />
+            </div>
+            <p className="intro-caption">A new perspective on your data</p>
+            <h1 className="intro-wordmark">PULSE</h1>
+            <div className="intro-rule" />
+            <p className="intro-byline">Made by Suyash Pandey</p>
+            <p className="intro-caption">Analytics · In real time</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIntroPhase('exit')}
+            disabled={introPhase === 'exit'}
+            className="intro-skip"
+          >
+            {introPhase === 'exit' ? 'Opening dashboard' : 'Skip intro'}
+            <Icon name="arrow" size={13} />
+          </button>
+          <div className="intro-progress" />
+        </section>
+      )}
+      <div
+        className={`mx-auto flex min-h-screen max-w-[1680px] ${
+          introPhase === 'dashboard' ? 'dashboard-slide-in' : 'dashboard-waiting'
+        }`}
+      >
         <aside className="sidebar-entry hidden w-[252px] shrink-0 flex-col border-r border-white/[0.07] bg-[#0c0e14] px-5 py-6 lg:flex">
           <button
             onClick={() => setActivePage('overview')}
